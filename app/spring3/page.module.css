@@ -1,0 +1,19 @@
+.main {
+  height: 100vh;
+  width: 100vw;
+  background: #00000010;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.container {
+  position: relative;
+  width: 200px;
+  height: 50px;
+  cursor: pointer;
+  border-radius: 5px;
+  border: 2px solid #272727;
+  overflow: hidden;
+}
