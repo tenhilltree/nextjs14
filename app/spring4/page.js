@@ -30,7 +30,8 @@ function MyComponent() {
     from: { opacity: 1, transform: "translate3d(100%,0,0)" },
     enter: { opacity: 1, transform: "translate3d(0%,0,0)" },
     leave: { opacity: 1, transform: "translate3d(-100%,0,0)" },
-    config: { mass: 5, tension: 200, friction: 200 },
+    config: { mass: 5, tension: 200, friction: 20 },
+    exitBeforeEnter: false,
   });
 
   // useEffect(() => {
@@ -45,7 +46,6 @@ function MyComponent() {
       }}
     >
       {transitions((style, item) => {
-        console.log(style);
         return (
           <animated.div
             className={styles.container}
