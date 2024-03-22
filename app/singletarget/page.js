@@ -29,10 +29,36 @@ function DragItem({ name }) {
   );
 }
 
+function DropArea({}) {
+  const [{ active, isOver }, drop] = useDrop(() => {
+    return {
+      accept: "a",
+      collect: (monitor, props) => {
+        console.log(props);
+        return {
+          active: monitor.canDrop(),
+          isOver: monitor.isOver(),
+        };
+      },
+      drop: (item, monitor) => {
+        console.log(item);
+      },
+    };
+  });
+
+  let bg = isOver ? "yellow" : active ? "red" : "black";
+
+  return (
+    <div className={styles.dropArea} style={{ background: bg }} ref={drop}>
+      Drag a box here
+    </div>
+  );
+}
+
 export default function SingleTarget() {
   return (
     <DndProvider backend={HTML5Backend}>
-      <div className={styles.dropArea}>Drag a box here</div>
+      <DropArea />
       <div className={styles.dragArea}>
         {items.map((item) => {
           return <DragItem key={item} name={item} />;
