@@ -1,49 +1,45 @@
 "use client";
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import ExcelJS from "exceljs";
-import { Button, Form, Input, Row, Col, Table } from "antd";
+import { Button, Form, Input, Row, Col, Table, Checkbox } from "antd";
 import styles from "./page.module.css";
 
-const columns = [
-  {
-    title: "Name",
-    dataIndex: "name",
-    key: "name",
-    width: 100,
-  },
-  {
-    title: "Company",
-    children: [
-      {
-        title: "Company Address",
-        dataIndex: "companyAddress",
-        key: "companyAddress",
-        width: 200,
-      },
-      {
-        title: "Company Name",
-        dataIndex: "companyName",
-        key: "companyName",
-      },
-    ],
-  },
-  {
-    title: "Gender",
-    dataIndex: "gender",
-    key: "gender",
-    width: 80,
-  },
+const tableWidth = [
+  "9%",
+  "20%",
+  "4.1%",
+  "4.1%",
+  "20%",
+  "4.1%",
+  "4.1%",
+  "4.1%",
+  "22%",
+  "4.1%",
+  "4.1%",
 ];
 
-const data = [];
+const treeData = new Map();
+
+const maxScoreGroup = {
+  group1: { max: 0, real: 0 },
+  group2: { max: 0, real: 0 },
+  group3: { max: 0, real: 0 },
+  group4: { max: 0, real: 0 },
+  group5: { max: 0, real: 0 },
+  group6: { max: 0, real: 0 },
+  group7: { max: 0, real: 0 },
+};
+
+const maxScoreMap = new Map();
 
 function MyComponent() {
   const [open, setOpen] = useState(false);
   const [workbook, setWorkbook] = useState(null);
   const [formItems, setFormItems] = useState([]);
   const [tableColumns, setTableColumns] = useState([]);
+  const [tableColumns2, setTableColumns2] = useState([]);
   const [change, setChange] = useState(3);
-  const [tabelData, setTableData] = useState([]);
+  const [tableData, setTableData] = useState([]);
 
   useEffect(() => {
     const fetchExcel = async () => {
@@ -72,6 +68,26 @@ function MyComponent() {
         });
         // console.log(items);
         setFormItems(items);
+
+        const temp1 = [];
+        const worksheetRadar = workbook.getWorksheet("雷达图（此sheet不显示）");
+        worksheetRadar.eachRow(function (row, rowNumber) {
+          if (rowNumber > 1 && rowNumber <= 154) {
+            temp1.push(row.values);
+            const [, stage, scene, content, , s1, s2, s3, s4, s5, s6] =
+              row.values;
+            treeData.set(`${stage}-${scene}-${content}`, [
+              s1,
+              s2,
+              s3,
+              s4,
+              s5,
+              s6,
+            ]);
+          }
+        });
+
+        console.log(treeData);
 
         const worksheetModel = workbook.getWorksheet("365价值模型"); // 获取第一个工作表
         const row1 = worksheetModel.getRow(1);
@@ -138,6 +154,7 @@ function MyComponent() {
         // console.log(columns2);
 
         const columns = [];
+        let columnCount = 0;
         for (let i = 1; i <= row1.cellCount; i++) {
           let cell = row1.getCell(i);
           const { fullAddress, text, isMerged, _mergeCount } = cell;
@@ -159,20 +176,23 @@ function MyComponent() {
               antdColumn.children = [];
               //Todo column width
               columns2.slice(mergeBegin, mergeEnd + 1).forEach((c) => {
-                let newKey = `${text}-${c.text}`;
+                let showText = c.text !== "价值映射" ? c.text : "选择";
+                let newKey = `${text}-${showText}`;
                 antdColumn.children.push({
-                  title: c.text,
+                  title: showText,
                   key: newKey,
                   dataIndex: newKey,
                   begin: c.begin,
                   end: c.end,
                   colSpan: c.colSpan,
                   onCell: c.onCell,
-                  width:
-                    Math.floor((c.width * 100) / fullWidth).toFixed(2) + "%",
+                  // Math.floor((c.width * 100) / fullWidth).toFixed(2) + "%",
+                  width: tableWidth[columnCount],
                   textWrap: "word-break",
+                  className: c.text === "内容" ? "content-column" : "",
                 });
-                c.text = newKey;
+                columnCount++;
+                c.text = `${text}-${c.text}`;
               });
             }
             columns.push(antdColumn);
@@ -187,33 +207,67 @@ function MyComponent() {
         // console.log(worksheetModel.rowCount);
         for (let i = 3; i < worksheetModel.rowCount; i++) {
           let row = worksheetModel.getRow(i);
+          let nextRow = worksheetModel.getRow(i + 1);
           let record = {};
           row.eachCell((cell, colNumber) => {
             if (colNumber >= 12) return;
             const { _mergeCount, col, row, text } = cell;
             let f = columns2[colNumber - 1].text;
             record[f] = text;
+
+            if (f.endsWith("-内容")) {
+              record[f + "-selected"] = false;
+              console.log(
+                `${record["3场景-5阶段"]}-${f.split("-")[0]}-${text}`
+              );
+              record[f + "-radar"] = treeData.get(
+                `${record["3场景-5阶段"]}-${f.split("-")[0]}-${text}`
+              );
+            }
             if (f === "创新应用-maxScore") {
               if (_mergeCount > 1) {
+                maxScoreMap.set(text, {
+                  max: text.match(/\d+/)[0],
+                  current: 0,
+                });
+                record.maxScoreGroup = text;
                 record.maxScoreRowSpan = _mergeCount + 1;
               } else if (_mergeCount === 1) {
+                record[f] = '';
                 record.maxScoreColSpan = 0;
                 record.contentColSpan = 2;
               } else {
+                record.maxScoreGroup = text;
+                // maxScoreMap.set("text", { max: 0, current: 0 });
                 record.maxScoreRowSpan = 0;
               }
             } else if (f === "3场景-5阶段") {
               if (_mergeCount > 0) {
-                record.column1RowSpan = _mergeCount + 1;
+                record.column1RowSpan = _mergeCount + 2;
               } else {
                 record.column1RowSpan = 0;
               }
             }
             // console.log(cell.value);
           });
+          record.key = i;
           data.push(record);
+          if (row.getCell(1).text !== nextRow.getCell(1).text) {
+            data.push({
+              column1RowSpan: 0,
+              "平台协同-内容": "合计得分",
+              "平台协同-评分": "0",
+              "BIM孪生-评分": "0",
+              maxScoreColSpan: 0,
+              contentColSpan: 2,
+              "创新应用-评分": "0",
+              isSummary: true,
+              key: i + "-summary",
+            });
+          }
         }
-        // console.log(data);
+        console.log(maxScoreMap);
+        console.log(data);
         setTableData(data);
 
         // 准备导出工作簿
@@ -359,6 +413,96 @@ function MyComponent() {
     // newExcel();
   }, [change]);
 
+  useEffect(() => {
+    const checkboxChange = (value, text, record, index) => {
+      console.log(value, text, record);
+      record[`${text}-内容-selected`] = value;
+      setTableData((t) => {
+        maxScoreMap.values().forEach((m) => {
+          m.current = 0;
+        });
+        let summary = 0;
+        if (value) {
+          if (text === "创新应用" && record["maxScoreGroup"]) {
+            let m = maxScoreMap.get(record[`maxScoreGroup`]);
+            let diff = Math.min(m.max - m.current, record[`${text}-评分`] || 0);
+            m.current += diff;
+            summary += diff;
+          } else {
+            summary += Number(record[`${text}-评分`] || 0);
+          }
+        }
+
+        let pre = index - 1;
+        while (true) {
+          let preRecord = t[pre];
+          if (preRecord?.["3场景-5阶段"] !== record["3场景-5阶段"]) break;
+          console.log(preRecord);
+          if (preRecord[`${text}-内容-selected`]) {
+            if (text === "创新应用" && preRecord["maxScoreGroup"]) {
+              let m = maxScoreMap.get(preRecord[`maxScoreGroup`]);
+              let diff = Math.min(
+                m.max - m.current,
+                preRecord[`${text}-评分`] || 0
+              );
+              m.current += diff;
+              summary += diff;
+            } else {
+              summary += Number(preRecord[`${text}-评分`] || 0);
+            }
+          }
+          pre--;
+        }
+        let next = index + 1;
+        while (true) {
+          let nextRecord = t[next];
+          if (nextRecord?.["3场景-5阶段"] !== record["3场景-5阶段"]) {
+            nextRecord[`${text}-评分`] = summary;
+            break;
+          }
+          console.log(nextRecord);
+          if (nextRecord[`${text}-内容-selected`]) {
+            // summary += Number(nextRecord[`${text}-评分`] || 0);
+            if (text === "创新应用" && nextRecord["maxScoreGroup"]) {
+              let m = maxScoreMap.get(nextRecord[`maxScoreGroup`]);
+              let diff = Math.min(
+                m.max - m.current,
+                nextRecord[`${text}-评分`] || 0
+              );
+              m.current += diff;
+              summary += diff;
+            } else {
+              summary += Number(nextRecord[`${text}-评分`] || 0);
+            }
+          }
+          next++;
+        }
+        console.log(summary);
+        return [...t];
+      });
+    };
+
+    tableColumns.forEach((c) => {
+      c.children.forEach((cc) => {
+        if (cc.title === "选择") {
+          cc.render = (_, record, index) => {
+            return record[`${c.title}-内容`] ? (
+              <>
+                <Checkbox
+                  checked={record[`${c.title}-内容-selected`]}
+                  onChange={(e) =>
+                    checkboxChange(e.target.checked, c.title, record, index)
+                  }
+                />
+              </>
+            ) : null;
+          };
+        }
+      });
+    });
+    setTableColumns2([...tableColumns]);
+  }, [tableColumns]);
+
   const exportExcel = async (workbook) => {
     if (workbook) {
       // 使用ExcelJS导出工作簿为Buffer
@@ -396,10 +540,14 @@ function MyComponent() {
   return (
     <div className={styles.main} onClick={() => {}}>
       <Table
-        columns={tableColumns}
-        dataSource={tabelData}
+        columns={tableColumns2}
+        dataSource={tableData}
+        rowKey="key"
         bordered
         pagination={false}
+        rowClassName={(record, index) =>
+          record.isSummary ? "summary-row" : ""
+        }
       />
       {/* <Form
         name="basic"

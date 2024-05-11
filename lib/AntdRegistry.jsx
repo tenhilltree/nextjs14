@@ -12,12 +12,12 @@ dayjs.locale("zh-cn");
 
 const theme = {
   token: {
-    fontSize: 16,
-    colorPrimary: "#52c41a",
+    // fontSize: 16,
+    // colorPrimary: "#52c41a",
   },
   components: {
     Table: {
-      borderColor: "red",
+      borderColor: "#333",
     },
   },
 };
