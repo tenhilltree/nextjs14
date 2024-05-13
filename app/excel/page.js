@@ -18,19 +18,68 @@ const tableWidth = [
   "4.1%",
 ];
 
+const table3Width = ["10%", "10%", "43.4%", "9%", "9%", "9.3%", "9.3%"];
+
 const treeData = new Map();
 
-const maxScoreGroup = {
-  group1: { max: 0, real: 0 },
-  group2: { max: 0, real: 0 },
-  group3: { max: 0, real: 0 },
-  group4: { max: 0, real: 0 },
-  group5: { max: 0, real: 0 },
-  group6: { max: 0, real: 0 },
-  group7: { max: 0, real: 0 },
-};
+// const maxScoreGroup = {
+//   group1: { max: 0, real: 0 },
+//   group2: { max: 0, real: 0 },
+//   group3: { max: 0, real: 0 },
+//   group4: { max: 0, real: 0 },
+//   group5: { max: 0, real: 0 },
+//   group6: { max: 0, real: 0 },
+//   group7: { max: 0, real: 0 },
+// };
 
 const maxScoreMap = new Map();
+
+const maxRadarScoreMap = new Map();
+
+let radarData = [0, 0, 0, 0, 0, 0];
+
+const radarTotal = [];
+
+let summaryRows = [];
+
+let columns3 = [
+  "五大阶段",
+  "场景",
+  "评分项",
+  `分项得分（百分制）`,
+  "组合得分（百分制）",
+  "权重系数",
+  "最终评分",
+];
+
+let stages = ["平台协同", "BIM孪生", "创新应用"];
+
+const tableColumns3 = columns3.map((c, i) => ({
+  title: c,
+  key: i + 1,
+  dataIndex: i + 1,
+  width: table3Width[i],
+  onCell: (_, index) => {
+    let j = i;
+    if (i === 4) {
+      j = 1;
+    } else if (i === 5 || i === 6) {
+      j = 0;
+    }
+    return {
+      rowSpan: _[`${j + 1}-rowSpan`],
+    };
+  },
+  className: i === 2 ? "score-level-3" : "",
+}));
+
+const scoreWeightMap = {
+  投资与策划: 0.15,
+  规划与设计: 0.25,
+  生产与供应: 0.25,
+  施工与交付: 0.3,
+  运营与消纳: 0.05,
+};
 
 function MyComponent() {
   const [open, setOpen] = useState(false);
@@ -38,8 +87,11 @@ function MyComponent() {
   const [formItems, setFormItems] = useState([]);
   const [tableColumns, setTableColumns] = useState([]);
   const [tableColumns2, setTableColumns2] = useState([]);
-  const [change, setChange] = useState(3);
+  const [change, setChange] = useState(2);
   const [tableData, setTableData] = useState([]);
+  const [radar100, setRadar100] = useState([0, 0, 0, 0, 0, 0]);
+  const [totalScore, setTotalScore] = useState(0);
+  const [tableData3, setTableData3] = useState([]);
 
   useEffect(() => {
     const fetchExcel = async () => {
@@ -69,25 +121,88 @@ function MyComponent() {
         // console.log(items);
         setFormItems(items);
 
-        const temp1 = [];
         const worksheetRadar = workbook.getWorksheet("雷达图（此sheet不显示）");
+        const data3 = [];
         worksheetRadar.eachRow(function (row, rowNumber) {
           if (rowNumber > 1 && rowNumber <= 154) {
-            temp1.push(row.values);
-            const [, stage, scene, content, , s1, s2, s3, s4, s5, s6] =
-              row.values;
-            treeData.set(`${stage}-${scene}-${content}`, [
-              s1,
-              s2,
-              s3,
-              s4,
-              s5,
-              s6,
-            ]);
+            const temp1 = [];
+            const temp2 = { key: rowNumber };
+            // debugger;
+            row.eachCell((cell, colNumber) => {
+              const { fullAddress, text, isMerged, _mergeCount } = cell;
+              // temp1.push(text.trim());
+
+              if (colNumber > 4) {
+                if (isMerged) {
+                  if (_mergeCount > 0) {
+                    let matches = cell.note.texts[1].text.match(/\d+/g);
+                    maxRadarScoreMap.set(
+                      `${temp1[0]}-${temp1[1]}-${temp1[2]}-${colNumber}`,
+                      {
+                        max: Number(matches[1]),
+                        single: Number(matches[0]),
+                        current: 0,
+                      }
+                    );
+                  } else {
+                  }
+                  temp1.push({
+                    value: text.trim(),
+                    group: `${temp1[0]}-${temp1[1]}-${worksheetRadar
+                      .getCell(cell.master.row, 3)
+                      .text.trim()}-${colNumber}`,
+                  });
+                } else {
+                  temp1.push({ value: text.trim() });
+                }
+                // console.log(text, isMerged, _mergeCount);
+              } else {
+                temp1.push(text.trim());
+
+                temp2[colNumber] = text.trim();
+                // if (isMerged) {
+                if (isMerged && _mergeCount > 0) {
+                  temp2[colNumber + "-rowSpan"] = _mergeCount + 1;
+                } else if (isMerged && _mergeCount === 0) {
+                  temp2[colNumber + "-rowSpan"] = 0;
+                } else {
+                  temp2[colNumber + "-rowSpan"] = 1;
+                }
+                // }
+              }
+            });
+            temp2[6] = scoreWeightMap[temp2[1]];
+            temp2[4] = 0;
+            temp2[5] = 0;
+            data3.push(temp2);
+            const [stage, scene, content, s1, s2, s3, s4, s5, s6] = temp1;
+            let groupPrefix = `${stage}-${scene}-${content}-`;
+            treeData.set(`${stage}-${scene}-${content}`, {
+              index: rowNumber - 2,
+              radar: [
+                { value: Number(s1.value), group: s1.group },
+                { value: Number(s2.value), group: s2.group },
+                { value: Number(s3.value), group: s3.group },
+                { value: Number(s4.value), group: s4.group },
+                { value: Number(s5.value), group: s5.group },
+                { value: Number(s6.value), group: s6.group },
+              ],
+            });
+          } else if (rowNumber === 155) {
+            row.eachCell((cell, colNumber) => {
+              const { fullAddress, text, isMerged, _mergeCount } = cell;
+              if (colNumber > 4) {
+                radarTotal[colNumber - 5] = Number(text);
+              }
+            });
           }
         });
 
-        console.log(treeData);
+        // console.log(data3);
+        setTableData3(data3);
+        // console.log(maxRadarScoreMap);
+        // console.log(treeData);
+        // return;
 
         const worksheetModel = workbook.getWorksheet("365价值模型"); // 获取第一个工作表
         const row1 = worksheetModel.getRow(1);
@@ -203,6 +318,7 @@ function MyComponent() {
         setTableColumns(columns);
 
         const data = [];
+        summaryRows = [];
 
         // console.log(worksheetModel.rowCount);
         for (let i = 3; i < worksheetModel.rowCount; i++) {
@@ -217,12 +333,15 @@ function MyComponent() {
 
             if (f.endsWith("-内容")) {
               record[f + "-selected"] = false;
-              console.log(
-                `${record["3场景-5阶段"]}-${f.split("-")[0]}-${text}`
-              );
+              // console.log(
+              //   `${record["3场景-5阶段"]}-${f.split("-")[0]}-${text}`
+              // );
               record[f + "-radar"] = treeData.get(
                 `${record["3场景-5阶段"]}-${f.split("-")[0]}-${text}`
-              );
+              )?.radar;
+              if (!record[f + "-radar"]) {
+                debugger;
+              }
             }
             if (f === "创新应用-maxScore") {
               if (_mergeCount > 1) {
@@ -233,7 +352,7 @@ function MyComponent() {
                 record.maxScoreGroup = text;
                 record.maxScoreRowSpan = _mergeCount + 1;
               } else if (_mergeCount === 1) {
-                record[f] = '';
+                record[f] = "";
                 record.maxScoreColSpan = 0;
                 record.contentColSpan = 2;
               } else {
@@ -253,7 +372,7 @@ function MyComponent() {
           record.key = i;
           data.push(record);
           if (row.getCell(1).text !== nextRow.getCell(1).text) {
-            data.push({
+            let summaryRow = {
               column1RowSpan: 0,
               "平台协同-内容": "合计得分",
               "平台协同-评分": "0",
@@ -263,11 +382,14 @@ function MyComponent() {
               "创新应用-评分": "0",
               isSummary: true,
               key: i + "-summary",
-            });
+            };
+            data.push(summaryRow);
+            summaryRows.push(summaryRow);
           }
         }
-        console.log(maxScoreMap);
-        console.log(data);
+        // console.log(summaryRows);
+        // console.log(maxScoreMap);
+        // console.log(data);
         setTableData(data);
 
         // 准备导出工作簿
@@ -415,7 +537,7 @@ function MyComponent() {
 
   useEffect(() => {
     const checkboxChange = (value, text, record, index) => {
-      console.log(value, text, record);
+      // console.log(value, text, record);
       record[`${text}-内容-selected`] = value;
       setTableData((t) => {
         maxScoreMap.values().forEach((m) => {
@@ -437,7 +559,7 @@ function MyComponent() {
         while (true) {
           let preRecord = t[pre];
           if (preRecord?.["3场景-5阶段"] !== record["3场景-5阶段"]) break;
-          console.log(preRecord);
+          // console.log(preRecord);
           if (preRecord[`${text}-内容-selected`]) {
             if (text === "创新应用" && preRecord["maxScoreGroup"]) {
               let m = maxScoreMap.get(preRecord[`maxScoreGroup`]);
@@ -460,7 +582,7 @@ function MyComponent() {
             nextRecord[`${text}-评分`] = summary;
             break;
           }
-          console.log(nextRecord);
+          // console.log(nextRecord);
           if (nextRecord[`${text}-内容-selected`]) {
             // summary += Number(nextRecord[`${text}-评分`] || 0);
             if (text === "创新应用" && nextRecord["maxScoreGroup"]) {
@@ -477,9 +599,40 @@ function MyComponent() {
           }
           next++;
         }
-        console.log(summary);
+        // console.log(summary);
+        let total1 = 0;
+        summaryRows.forEach((row) => {
+          for (let i = 1; i < tableColumns.length; i++) {
+            total1 += +row[tableColumns[i].title + "-评分"];
+          }
+        });
+        setTotalScore(total1);
         return [...t];
       });
+
+      let r = record[`${text}-内容-radar`];
+      radarData = radarData.map((i, index) => {
+        let realS = value ? r[index].value : -r[index].value;
+        if (maxRadarScoreMap.has(r[index].group)) {
+          let t = maxRadarScoreMap.get(r[index].group);
+
+          if (value) {
+            realS = Math.max(0, Math.min(t.max - t.current, t.single));
+            t.current += t.single;
+          } else {
+            realS = Math.min(
+              0,
+              Math.max(t.current - t.max - t.single, -t.single)
+            );
+            t.current -= t.single;
+          }
+        }
+        return i + realS;
+      });
+      // console.log(radarData);
+      setRadar100(
+        radarData.map((r, i) => Math.ceil((r * 100) / radarTotal[i]))
+      );
     };
 
     tableColumns.forEach((c) => {
@@ -537,11 +690,72 @@ function MyComponent() {
     console.log("Failed:", errorInfo);
   };
 
+  const showTable3 = () => {
+    tableData.forEach((x) => {
+      stages.forEach((s) => {
+        if (x[`${s}-内容`] && x[`${s}-内容-selected`]) {
+          tableData3[
+            treeData.get(`${x["3场景-5阶段"]}-${s}-${x[s + "-内容"]}`).index
+          ]["4"] = Math.ceil(x[`${s}-评分`] / scoreWeightMap[x["3场景-5阶段"]]);
+        }
+      });
+    });
+
+    let total1 = 0;
+    let rr = 0;
+    let sceneRows = [];
+    let stageRows = [];
+    for (let i = 0; i < tableData3.length; ) {
+      stageRows.push(i);
+      i += tableData3[i]["2-rowSpan"];
+    }
+
+    for (let i = 0; i < tableData3.length; ) {
+      sceneRows.push(i);
+      i += tableData3[i]["1-rowSpan"];
+    }
+
+    console.log(sceneRows);
+    let xx = 0;
+    let yy = 0;
+
+    summaryRows.forEach((row) => {
+      let sss = 0;
+      for (let i = 1; i < tableColumns.length; i++) {
+        let n = +row[tableColumns[i].title + "-评分"];
+        sss += n;
+        let item = tableData3[stageRows[xx++]];
+        item["5"] = Math.ceil(n / scoreWeightMap[item["1"]]);
+      }
+      let itemSSS = tableData3[sceneRows[yy++]];
+      itemSSS["7"] = sss;
+    });
+
+    console.log(tableData);
+    console.log(tableData3);
+    console.log(treeData);
+    setTableData3([...tableData3]);
+  };
+
   return (
     <div className={styles.main} onClick={() => {}}>
+      <div onClick={showTable3}>{totalScore}</div>
+      <br />
+      {radar100.join("-")}
       <Table
         columns={tableColumns2}
         dataSource={tableData}
+        rowKey="key"
+        bordered
+        pagination={false}
+        rowClassName={(record, index) =>
+          record.isSummary ? "summary-row" : ""
+        }
+      />
+
+      <Table
+        columns={tableColumns3}
+        dataSource={tableData3}
         rowKey="key"
         bordered
         pagination={false}
