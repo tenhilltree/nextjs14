@@ -173,7 +173,7 @@ function MyComponent() {
         worksheetInfo.eachRow((row, rowNumber) => {
           //rule
           if (rowNumber !== 1) {
-            row.eachCell(function (cell, colNumber) {
+            row.eachCell((cell, colNumber) => {
               const { address, col, row, text } = cell;
               _formItems.push({
                 address,
@@ -269,6 +269,7 @@ function MyComponent() {
         });
 
         setScoreTableData(_scoreTableData);
+        workbook.removeWorksheet(worksheetRadar.id);
 
         //rule
         const worksheetModel = workbook.getWorksheet("365价值模型");
@@ -332,6 +333,9 @@ function MyComponent() {
             });
           }
           i += _mergeCount;
+          if (text === "价值映射") {
+            cell.value = "选择";
+          }
         }
 
         const _editTableColumns = [];
@@ -419,6 +423,7 @@ function MyComponent() {
 
             if (f.endsWith("-内容")) {
               record[f + "-selected"] = false;
+              record[f + "-position"] = [row, col + 1];
               // console.log(
               //   `${record["3场景-5阶段"]}-${f.split("-")[0]}-${text}`
               // );
@@ -519,17 +524,52 @@ function MyComponent() {
   };
 
   const showTable3 = () => {
+    let analysisStage = {};
+    let analysisScene = {};
+    const worksheetModel = workbook.getWorksheet("365价值模型");
     editTableData.forEach((x) => {
-      scenes.forEach((s) => {
-        if (x[`${s}-内容`] && x[`${s}-内容-selected`]) {
+      scenes.forEach((scene) => {
+        let stage = x["3场景-5阶段"];
+        let valueMap = x[`${scene}-价值映射`];
+        if (x[`${scene}-内容`] && x[`${scene}-内容-selected`]) {
+          // 得分表里每一个评分项的得分
           scoreTableData[
-            fullLevelsMap.get(
-              `${x["3场景-5阶段"]}-${s}-${x[s + "-内容"]}`
-            ).index
-          ]["4"] = Math.ceil(x[`${s}-评分`] / scoreWeightMap[x["3场景-5阶段"]]);
+            fullLevelsMap.get(`${stage}-${scene}-${x[scene + "-内容"]}`).index
+          ]["4"] = Math.ceil(x[`${scene}-评分`] / scoreWeightMap[stage]);
+
+          //价值映射
+          analysisStage[stage] =
+            analysisStage[stage] ||
+            new Array(6).fill(null).map(() => new Set());
+          valueMap.split("、").forEach((v) => {
+            analysisStage[stage][Number(v) - 1].add(x[`${scene}-内容`]);
+          });
+
+          analysisScene[scene] =
+            analysisScene[scene] ||
+            new Array(6).fill(null).map(() => new Set());
+          valueMap.split("、").forEach((v) => {
+            analysisScene[scene][Number(v) - 1].add(x[`${scene}-内容`]);
+          });
+          let position = x[`${scene}-内容-position`];
+          worksheetModel.getCell(position[0], position[1]).value = "✓";
+        } else if (
+          x[`${scene}-内容`] &&
+          !x.key.toString().endsWith("-summary")
+        ) {
+          analysisStage[stage] =
+            analysisStage[stage] ||
+            new Array(6).fill(null).map(() => new Set());
+          analysisScene[scene] =
+            analysisScene[scene] ||
+            new Array(6).fill(null).map(() => new Set());
+          let position = x[`${scene}-内容-position`];
+          worksheetModel.getCell(position[0], position[1]).value = "";
         }
       });
     });
+    console.log(analysisStage);
+    console.log(analysisScene);
 
     let sceneRows = [];
     let stageRows = [];
@@ -563,6 +603,85 @@ function MyComponent() {
     console.log(scoreTableData);
     console.log(fullLevelsMap);
     setScoreTableData([...scoreTableData]);
+
+    worksheetModel.getRow(1).eachCell((cell, colNumber) => {
+      const { address, col, row, text } = cell;
+      if (analysisScene[text]) {
+        let texts = [];
+        analysisScene[text]?.forEach((arr, i) => {
+          arr = Array.from(arr);
+          if (!arr.length) return;
+          if (text === "平台协同") {
+            if (arr.filter((a) => a.endsWith("在线协同")).length > 1) {
+              arr = Array.from(
+                new Set(
+                  arr.map((a) =>
+                    a.endsWith("在线协同") ? "平台计划在线协同" : a
+                  )
+                )
+              );
+            }
+          }
+          if (i == 0) {
+            texts.push(`1、通过应用${arr.join("、")}，实现结构安全；\n`);
+          } else if (i === 1) {
+            texts.push(`2、通过应用${arr.join("、")}，实现成本优；\n`);
+          } else if (i === 2) {
+            texts.push(`3、通过应用${arr.join("、")}，实现低碳智慧；\n`);
+          } else if (i === 3) {
+            texts.push(`4、通过应用${arr.join("、")}，实现品质好；\n`);
+          } else if (i === 4) {
+            texts.push(`5、通过应用${arr.join("、")}，实现施工快；\n`);
+          } else if (i === 5) {
+            texts.push(`6、通过应用${arr.join("、")}，实现人工省。\n`);
+          }
+        });
+        worksheetModel.getCell(125, col).value = texts.join("");
+      }
+    });
+
+    const titleMap = {
+      投资与策划: "强排规划、价值分析辅助投资决策，三图两表上平台\n",
+      规划与设计:
+        "超前直观体验，优化空间关系，减少设计差错，创新技术体系，辅助方案决策\n",
+      生产与供应: "孪生智能制造，一件一码JIT，平台撮合招采\n",
+      施工与交付:
+        "精准共享排程，复杂工艺仿真，低碳智慧施工，孪生交付（实物+数据资产（资产负债表））\n",
+      运营与消纳: "智慧楼宇、数字运维，城市大脑、国家资产\n",
+    };
+
+    worksheetModel.getColumn(1).eachCell((cell, rowNumber) => {
+      const { address, col, row, text } = cell;
+      if (analysisStage[text]) {
+        let title = titleMap[text];
+        let texts = [];
+
+        analysisStage[text]?.forEach((arr, i) => {
+          arr = Array.from(arr);
+          if (!arr.length) return;
+          if (i == 0) {
+            texts.push(`1、通过应用${arr.join("、")}，实现结构安全；\n`);
+          } else if (i === 1) {
+            texts.push(`2、通过应用${arr.join("、")}，实现成本优；\n`);
+          } else if (i === 2) {
+            texts.push(`3、通过应用${arr.join("、")}，实现低碳智慧；\n`);
+          } else if (i === 3) {
+            texts.push(`4、通过应用${arr.join("、")}，实现品质好；\n`);
+          } else if (i === 4) {
+            texts.push(`5、通过应用${arr.join("、")}，实现施工快；\n`);
+          } else if (i === 5) {
+            texts.push(`6、通过应用${arr.join("、")}，实现人工省。\n`);
+          }
+        });
+        worksheetModel.getCell(rowNumber, 12).value = {
+          richText: [
+            { font: { name: "宋体", size: 12, bold: true }, text: title },
+            { font: { name: "宋体", size: 11 }, text: texts.join("") },
+          ],
+        };
+      }
+    });
+    setWorkbook(workbook);
   };
 
   return (
